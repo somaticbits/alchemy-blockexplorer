@@ -1,7 +1,10 @@
 import { Alchemy, Network } from 'alchemy-sdk';
 import { useEffect, useState } from 'react';
+import { useDebounce } from "use-debounce";
 
+import Home from './pages/Home';
 import './App.css';
+import useAsyncEffect from "use-async-effect";
 
 // Refer to the README doc for more information about using API
 // keys in client-side code. You should never do this in production
@@ -19,18 +22,41 @@ const settings = {
 //   https://docs.alchemy.com/reference/alchemy-sdk-api-surface-overview#api-surface
 const alchemy = new Alchemy(settings);
 
-function App() {
+const App = () => {
+  const [currentBlockNumber, setCurrentBlockNumber] = useState();
   const [blockNumber, setBlockNumber] = useState();
+  const [debouncedBlockNumber] = useDebounce(blockNumber, 1000); // Debounce block number to prevent spamming API
+  const [block, setBlock] = useState();
+
+  const getBlock = async (_blockNumber) => {
+    setBlockNumber(_blockNumber);
+  }
+
+  useAsyncEffect(async () => {
+    setBlock(await alchemy.core.getBlockWithTransactions(debouncedBlockNumber));
+  }, [debouncedBlockNumber]);
+
+  // Set current block number on page load
+  useAsyncEffect(async () => {
+    setCurrentBlockNumber(await alchemy.core.getBlockNumber());
+  }, []);
 
   useEffect(() => {
-    async function getBlockNumber() {
-      setBlockNumber(await alchemy.core.getBlockNumber());
-    }
+    // Update block number when new block is mined
+    alchemy.ws.on("block", (blockNumber) => {
+      setCurrentBlockNumber(blockNumber);
+    });
+  }, []);
 
-    getBlockNumber();
-  });
 
-  return <div className="App">Block Number: {blockNumber}</div>;
+  return <div className="App">
+    <Home block={ block }
+          getBlock={ getBlock }
+          blockNumber={ blockNumber }
+          setBlockNumber={ setBlockNumber }
+          currentBlockNumber={ currentBlockNumber }
+    />
+  </div>;
 }
 
 export default App;
